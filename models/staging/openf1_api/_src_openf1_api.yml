@@ -1,0 +1,10 @@
+sources:
+  - name: openf1_api
+    database: raw
+    schema: openf1_api
+    tables:
+      - name: sessions
+      - name: session_result
+      - name: fp3_result
+      - name: laps
+      - name: stints
