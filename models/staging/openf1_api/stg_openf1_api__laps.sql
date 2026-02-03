@@ -2,7 +2,7 @@ select
     session_key as session_id,
     meeting_key as meeting_id,
     driver_number,
-    date_start,
+    date_start as time_start,
     lap_number,
     lap_duration,
     duration_sector_1,
