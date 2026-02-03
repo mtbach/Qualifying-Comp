@@ -11,6 +11,7 @@ select
     i1_speed,
     i2_speed,
     st_speed,
-    is_pit_out_lap
+    is_pit_out_lap,
+    time_loaded
 from {{ source("openf1_api", "laps")}}
 

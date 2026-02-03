@@ -9,5 +9,6 @@ select
     duration_q3,
     dnf as is_dnf,
     dns as is_dns,
-    dsq as is_dsq
+    dsq as is_dsq,
+    time_loaded
 from {{ source("openf1_api", "session_result")}}

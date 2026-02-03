@@ -6,5 +6,6 @@ select
     lap_start,
     lap_end,
     compound,
-    tyre_age_at_start
-from {{ source("openf1_api", "stints")}}
+    tyre_age_at_start,
+    time_loaded
+from {{ source("openf1_api", "stint")}}
