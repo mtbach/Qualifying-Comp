@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import snowflake.connector
 import plotly.graph_objects as go
-from dash import Dash, dcc, html, Input, Output, State
+from dash import Dash, dcc, html, Input, Output, State, callback
 from dash.exceptions import PreventUpdate
 import os
 from dotenv import load_dotenv
@@ -20,6 +20,12 @@ SNOWFLAKE_CONFIG = {
 }
 conn = snowflake.connector.connect(**SNOWFLAKE_CONFIG)
 curr = conn.cursor()
+METRICS = ["SPEED", "THROTTLE", "GEAR", "BRAKE"]
+
+def load_session_list():
+    query = "SELECT session_id, circuit_name from dim_openf1_api__sessions WHERE session_name = 'QUALIFYING' and year = 2025;"
+    res = curr.execute(query).fetch_pandas_all()
+    return res
 
 def load_session_data(SESSION_ID, DRIVER_NUMBER):
     query1 = (f"""SELECT time_start from fct_openf1_api__fastest_lap WHERE session_id = {SESSION_ID} AND driver_number = {DRIVER_NUMBER};""")
@@ -38,7 +44,7 @@ def load_session_data(SESSION_ID, DRIVER_NUMBER):
             y,
             speed,
             rpm,
-            n_gear, 
+            n_gear as gear, 
             throttle,
             brake
         FROM fct_openf1_api__telemetry_{str(DRIVER_NUMBER)}
@@ -63,55 +69,24 @@ def preprocess_driver(df):
     return df
 
 
-def add_lap_distance(df):
-    dx = df["X"].diff()
-    dy = df["Y"].diff()
-
-    df["SEG_DIST"] = np.sqrt(dx**2 + dy**2).fillna(0)
-    df["CUM_DIST"] = df["SEG_DIST"].cumsum()
-
-    total_dist = df["CUM_DIST"].iloc[-1]
-    df["PROGRESS"] = df["CUM_DIST"] / total_dist
-
-    return df
-
 def row_at_progress(df, progress):
     idx = (df["PROGRESS"] - progress).abs().idxmin()
     return df.loc[idx]
 
-def progress_from_xy(x, y):
-    dx = TRACK_X - x
-    dy = TRACK_Y - y
-    dist = dx**2 + dy**2
-    idx = dist.argmin()
-    return TRACK_PROGRESS[idx]
+# def progress_from_xy(x, y):
+#     dx = TRACK_X - x
+#     dy = TRACK_Y - y
+#     dist = dx**2 + dy**2
+#     idx = dist.argmin()
+#     return TRACK_PROGRESS[idx]
 
 
-SESSION_ID = 9935
-DRIVERS = {4, 81}
-
-df_81 = load_session_data(SESSION_ID, 81)
-df_4 = load_session_data(SESSION_ID, 4)
-
-df_81 = preprocess_driver(df_81)
-df_4= preprocess_driver(df_4)
-
-TRACK_X = df_81["X"].values
-TRACK_Y = df_81["Y"].values
-TRACK_PROGRESS = df_81["PROGRESS"].values
+session_list = load_session_list()
+session_labels = dict(zip(session_list["SESSION_ID"], session_list["CIRCUIT_NAME"]))
+print(session_labels)
 
 
-DRIVERS = {
-    "81": df_81,
-    "4": df_4
-}
-
-TIME_SERIES = {
-    d: df["TIME"]
-    for d, df in DRIVERS.items()
-}
-
-def base_circuit_figure():
+def base_circuit_figure(TRACK_X, TRACK_Y):
     fig = go.Figure()
 
     fig.add_trace(
@@ -190,47 +165,17 @@ def add_cursor(fig, cursor_time):
 
     return fig
 
-BASE_METRIC_FIGS = {
-    "81": {
-        "SPEED":   time_series_figure(df_81, "SPEED", "#e10600"),
-        "THROTTLE":time_series_figure(df_81, "THROTTLE", "#e10600"),
-        "N_GEAR":  time_series_figure(df_81, "N_GEAR", "#e10600"),
-        "BRAKE":   time_series_figure(df_81, "BRAKE", "#e10600"),
-    },
-    "4": {
-        "SPEED":   time_series_figure(df_4, "SPEED", "#00d2be"),
-        "THROTTLE":time_series_figure(df_4, "THROTTLE", "#00d2be"),
-        "N_GEAR":  time_series_figure(df_4, "N_GEAR", "#00d2be"),
-        "BRAKE":   time_series_figure(df_4, "BRAKE", "#00d2be"),
-    }
-}
 
-def metrics_panel(driver, df, row):
-    figs = BASE_METRIC_FIGS[driver]
+def metrics_panel(driver, base_fig, row):
 
-    return html.Div([
-        html.H3(f"Driver {driver}", style={"marginBottom": "12px"}),
+    return [{html.Div([
 
         dcc.Graph(
-            figure=add_cursor(figs["SPEED"], row["TIME"]),
+            id=f'{driver}-{metric}',
+            figure=add_cursor(base_fig[metric], row["TIME"]),
             config={"displayModeBar": False},
-        ),
-
-        dcc.Graph(
-            figure=add_cursor(figs["THROTTLE"], row["TIME"]),
-            config={"displayModeBar": False}
-        ),
-
-        dcc.Graph(
-            figure=add_cursor(figs["N_GEAR"], row["TIME"]),
-            config={"displayModeBar": False}
-        ),
-
-        dcc.Graph(
-            figure=add_cursor(figs["BRAKE"], row["TIME"]),
-            config={"displayModeBar": False}
         )
-    ])
+    ])} for metric in METRICS]
 
 
 
@@ -239,7 +184,33 @@ app = Dash(__name__)
 app.layout = html.Div(
     children=[
         html.Div(
+            children=[
+                dcc.Dropdown(
+                    options=[
+                        {'label': v, 'value': k}
+                        for k, v in session_labels.items()
+                    ],
+                    value = 9689,
+                    id="session-dropdown"
+                )
+            ]
+        ),
+        html.Div(
             id="metrics-left",
+            children=[
+                dcc.Graph(
+                    id="81-SPEED"
+                ),
+                dcc.Graph(
+                    id="81-THROTTLE"
+                ),
+                dcc.Graph(
+                    id="81-GEAR"
+                ),
+                dcc.Graph(
+                    id="81-BRAKE"
+                )
+            ],
             style={
                 "width": "20%",
                 "padding": "16px",
@@ -253,7 +224,7 @@ app.layout = html.Div(
             children=[
                 dcc.Graph(
                     id="circuit",
-                    figure=base_circuit_figure(),
+                    figure={},
                     clear_on_unhover=False,
                     style={"height": "100%"}
                 )
@@ -268,6 +239,20 @@ app.layout = html.Div(
 
         html.Div(
             id="metrics-right",
+            children=[
+                dcc.Graph(
+                    id="4-SPEED"
+                ),
+                dcc.Graph(
+                    id="4-THROTTLE"
+                ),
+                dcc.Graph(
+                    id="4-GEAR"
+                ),
+                dcc.Graph(
+                    id="4-BRAKE"
+                )
+            ],
             style={
                 "width": "20%",
                 "padding": "16px",
@@ -276,6 +261,9 @@ app.layout = html.Div(
                 "borderLeft": "1px solid #333"
             }
         ),
+        dcc.Store(id="stored-progress"),
+        dcc.Store(id="4-data"),
+        dcc.Store(id="81-data")
     ],
     style={
         "display": "flex",
@@ -286,23 +274,117 @@ app.layout = html.Div(
 )
 
 
+@callback(
+    Output("circuit", "figure", allow_duplicate=True),
+    Output("stored-progress", "data"),
+    Output("81-SPEED", "figure", allow_duplicate=True),
+    Output("81-THROTTLE", "figure", allow_duplicate=True),
+    Output("81-GEAR", "figure", allow_duplicate=True),
+    Output("81-BRAKE", "figure", allow_duplicate=True),
+    Output("4-SPEED", "figure", allow_duplicate=True),
+    Output("4-THROTTLE", "figure", allow_duplicate=True),
+    Output("4-GEAR", "figure", allow_duplicate=True),
+    Output("4-BRAKE", "figure", allow_duplicate=True),
 
-@app.callback(
+    Output("81-data", "data"),
+    Output("4-data", "data"),
+    Input("session-dropdown", "value"),
+    prevent_initial_call=True
+    )
+def update_session(value):
+    df_81 = load_session_data(value, 81)
+    df_4 = load_session_data(value, 4)
+    print(df_81)
+    df_81 = preprocess_driver(df_81)
+    df_4= preprocess_driver(df_4)
+
+    TRACK_X = df_81["X"].values
+    TRACK_Y = df_81["Y"].values
+    TRACK_PROGRESS = df_81["PROGRESS"]
+    json_progress = {
+        "df": TRACK_PROGRESS.to_dict()
+    }
+    json_81 = {
+        "df": df_81.to_dict()
+    }
+    json_4 = {
+        "df": df_4.to_dict()
+    }
+    BASE_METRIC_FIGS = {
+    "81": {
+        "SPEED":   time_series_figure(df_81, "SPEED", "#e10600"),
+        "THROTTLE":time_series_figure(df_81, "THROTTLE", "#e10600"),
+        "GEAR":  time_series_figure(df_81, "GEAR", "#e10600"),
+        "BRAKE":   time_series_figure(df_81, "BRAKE", "#e10600"),
+    },
+    "4": {
+        "SPEED":   time_series_figure(df_4, "SPEED", "#00d2be"),
+        "THROTTLE":time_series_figure(df_4, "THROTTLE", "#00d2be"),
+        "GEAR":  time_series_figure(df_4, "GEAR", "#00d2be"),
+        "BRAKE":   time_series_figure(df_4, "BRAKE", "#00d2be"),
+    }
+    }
+    
+
+    # TIME_SERIES = {
+    #     d: df["TIME"]
+    #     for d, df in DRIVERS.items()
+    # }
+    return (base_circuit_figure(TRACK_X, TRACK_Y), 
+            json_progress, 
+            BASE_METRIC_FIGS['81']["SPEED"],
+            BASE_METRIC_FIGS["81"]["THROTTLE"],
+            BASE_METRIC_FIGS["81"]["GEAR"],
+            BASE_METRIC_FIGS["81"]["BRAKE"],
+            BASE_METRIC_FIGS['4']["SPEED"],
+            BASE_METRIC_FIGS["4"]["THROTTLE"],
+            BASE_METRIC_FIGS["4"]["GEAR"],
+            BASE_METRIC_FIGS["4"]["BRAKE"],
+            json_81,
+            json_4)
+
+@callback(
     Output("circuit", "figure"),
-    Output("metrics-left", "children"),
-    Output("metrics-right", "children"),
+    Output("81-SPEED", "figure"),
+    Output("81-THROTTLE", "figure"),
+    Output("81-GEAR", "figure"),
+    Output("81-BRAKE", "figure"),
+    Output("4-SPEED", "figure"),
+    Output("4-THROTTLE", "figure"),
+    Output("4-GEAR", "figure"),
+    Output("4-BRAKE", "figure"),
+
     Input("circuit", "clickData"),
-    State("circuit", "figure")
+    Input("stored-progress", "data"),
+    Input("81-data", "data"),
+    Input("4-data", "data"),
+    State("circuit", "figure"),
+    State("81-SPEED", "figure"),
+    State("81-THROTTLE", "figure"),
+    State("81-GEAR", "figure"),
+    State("81-BRAKE", "figure"),
+    State("4-SPEED", "figure"),
+    State("4-THROTTLE", "figure"),
+    State("4-GEAR", "figure"),
+    State("4-BRAKE", "figure")
 )
-def scrub_track(clickData, fig):
+def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed_81, throttle_81, gear_81, brake_81, speed_4, throttle_4, gear_4, brake_4):
+    
     if clickData is None:
         raise PreventUpdate
-
+    
+    # unpacked_progress = pd.DataFrame(TRACK_PROGRESS["df"])
+    unpacked_progress = pd.DataFrame(TRACK_PROGRESS)["df"].values
+    unpacked_81 = pd.DataFrame(DATA_81["df"])
+    unpacked_4 = pd.DataFrame(DATA_4["df"])
+    
     point_idx = clickData["points"][0]["pointIndex"]
-    progress = TRACK_PROGRESS[point_idx]
-
-    row_81 = row_at_progress(DRIVERS["81"], progress)
-    row_4 = row_at_progress(DRIVERS["4"], progress)
+    
+    progress = unpacked_progress[point_idx]
+    print(progress)
+    print(unpacked_4)
+    row_81 = row_at_progress(unpacked_81, progress)
+    row_4 = row_at_progress(unpacked_4, progress)
 
     fig["data"] = fig["data"][:2]
 
@@ -327,10 +409,17 @@ def scrub_track(clickData, fig):
         "hoverinfo": "skip"
     })
 
+    
     return (
         fig,
-        metrics_panel("81", DRIVERS["81"], row_81),
-        metrics_panel("4", DRIVERS["4"], row_4 )
+        add_cursor(speed_81, row_81["TIME"]),
+        add_cursor(throttle_81, row_81["TIME"]),
+        add_cursor(gear_81, row_81["TIME"]),
+        add_cursor(brake_81, row_81["TIME"]),
+        add_cursor(speed_4, row_4["TIME"]),
+        add_cursor(throttle_4, row_4["TIME"]),
+        add_cursor(gear_4, row_4["TIME"]),
+        add_cursor(brake_4, row_4["TIME"])
     )
 
 
