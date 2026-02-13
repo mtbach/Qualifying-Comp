@@ -56,6 +56,12 @@ def load_session_data(SESSION_ID, DRIVER_NUMBER):
     df = curr.execute(query, (time_start, time_end)).fetch_pandas_all()
     return df
 
+def load_lap_data(SESSION_ID, DRIVER_NUMBER):
+    query = (f"""SELECT session_id, to_varchar(time_start, 'HH24:MI:SS') as time_start, lap_duration, duration_sector_1, duration_sector_2, duration_sector_3, compound, tyre_age from fct_openf1_api__fastest_lap WHERE session_id = {SESSION_ID} AND driver_number={DRIVER_NUMBER};""")
+    lap_df = curr.execute(query).fetch_pandas_all()
+    return lap_df
+
+
 def preprocess_driver(df):
     df = df.sort_values("TIME").reset_index(drop=True)
 
@@ -207,7 +213,17 @@ def metrics_panel(driver, base_fig, row):
         )
     ])} for metric in METRICS]
 
-
+def lap_panel(df):
+    return [html.Div([
+            html.H3(f'Tire Compound:    {df["COMPOUND"].iloc[0]}'),
+            html.H3(f'Tire Age:    {df["TYRE_AGE"].iloc[0]}'),
+            html.H3(f'Lap Starts At:    {df["TIME_START"].iloc[0]}'),
+            html.H3(f'Lap Time:    {df["LAP_DURATION"].iloc[0]}'),
+            html.H3(f'Sector 1 Time:    {df["DURATION_SECTOR_1"].iloc[0]}'),
+            html.H3(f'Sector 2 Time:    {df["DURATION_SECTOR_2"].iloc[0]}'),
+            html.H3(f'Sector 3 Time:    {df["DURATION_SECTOR_3"].iloc[0]}')
+    ])]
+    
 app = Dash(__name__)
 
 app.layout = html.Div(
@@ -216,7 +232,8 @@ app.layout = html.Div(
         html.Div(
             id="metrics-left",
             children=[
-                html.Div("DRIVER 1'S STATS GO HERE")
+                html.Div("DRIVER 81:"),
+                html.Div(id="81-lap-data")
             ],
             style={
                 "width": "20%",
@@ -278,7 +295,8 @@ app.layout = html.Div(
          html.Div(
             id="metrics-right",
             children=[
-                html.Div("DRIVER 2'S STATS GO HERE")
+                html.Div("DRIVER 4:"),
+                html.Div(id="4-lap-data")
             ],
             style={
                 "width": "20%",
@@ -310,7 +328,8 @@ app.layout = html.Div(
     Output("THROTTLE", "figure", allow_duplicate=True),
     Output("GEAR", "figure", allow_duplicate=True),
     Output("BRAKE", "figure", allow_duplicate=True),
-
+    Output("81-lap-data", "children"),
+    Output("4-lap-data", "children"),
     Output("81-data", "data"),
     Output("4-data", "data"),
     Input("session-dropdown", "value"),
@@ -322,7 +341,10 @@ def update_session(value):
     print(df_81)
     df_81 = preprocess_driver(df_81)
     df_4= preprocess_driver(df_4)
-
+    
+    lap_81 = load_lap_data(value, 81)
+    lap_4 = load_lap_data(value, 4)
+    print(lap_4)
     TRACK_X = df_81["X"].values
     TRACK_Y = df_81["Y"].values
     TRACK_PROGRESS = df_81["PROGRESS"]
@@ -344,7 +366,8 @@ def update_session(value):
             COMP_FIGS['THROTTLE'],
             COMP_FIGS['GEAR'],
             COMP_FIGS['BRAKE'],
-
+            lap_panel(lap_81),
+            lap_panel(lap_4),
             json_81,
             json_4)
 
@@ -396,15 +419,15 @@ def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed, throttl
         "hoverinfo": "skip"
     })
 
-    fig["data"].append({
-        "type": "scatter",
-        "x": [row_4["X"]],
-        "y": [row_4["Y"]],
-        "mode": "markers",
-        "marker": {"size": 14},
-        "name": "Driver 4",
-        "hoverinfo": "skip"
-    })
+    # fig["data"].append({
+    #     "type": "scatter",
+    #     "x": [row_4["X"]],
+    #     "y": [row_4["Y"]],
+    #     "mode": "markers",
+    #     "marker": {"size": 14},
+    #     "name": "Driver 4",
+    #     "hoverinfo": "skip"
+    # })
 
     
     return (
