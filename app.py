@@ -73,17 +73,9 @@ def row_at_progress(df, progress):
     idx = (df["PROGRESS"] - progress).abs().idxmin()
     return df.loc[idx]
 
-# def progress_from_xy(x, y):
-#     dx = TRACK_X - x
-#     dy = TRACK_Y - y
-#     dist = dx**2 + dy**2
-#     idx = dist.argmin()
-#     return TRACK_PROGRESS[idx]
-
 
 session_list = load_session_list()
 session_labels = dict(zip(session_list["SESSION_ID"], session_list["CIRCUIT_NAME"]))
-print(session_labels)
 
 
 def base_circuit_figure(TRACK_X, TRACK_Y):
@@ -113,14 +105,53 @@ def base_circuit_figure(TRACK_X, TRACK_Y):
     fig.update_layout(
         dragmode="pan",  
         hovermode="closest",
+        showlegend=False,
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
-        height=600,
+        height=300,
         uirevision="track",
-        margin=dict(l=20, r=20, t=20, b=20)
+        margin=dict(l=15, r=15, t=15, b=15)
     )
 
     return fig
+
+def base_comparison_figure(df_81, df_4, metric):
+    fig = go.Figure()
+
+    # Driver 81
+    fig.add_trace(
+        go.Scatter(
+            x=df_81["PROGRESS"],
+            y=df_81[metric],
+            mode="lines",
+            name="Driver 81",
+            line=dict(color="#e10600")
+        )
+    )
+
+    # Driver 4
+    fig.add_trace(
+        go.Scatter(
+            x=df_4["PROGRESS"],
+            y=df_4[metric],
+            mode="lines",
+            name="Driver 4",
+            line=dict(color="#00d2be")
+        )
+    )
+
+    fig.update_layout(
+        height=220,
+        margin=dict(l=30, r=10, t=10, b=30),
+        xaxis_title="Lap Progress",
+        yaxis_title=metric,
+        template="plotly_dark",
+        legend=dict(orientation="h", y=1.1)
+    )
+    fig.update_xaxes(dtick=0.1)
+    fig.update_yaxes(dtick=50)
+    return fig
+
 
 def time_series_figure(df, metric, color):
     fig = go.Figure()
@@ -146,14 +177,14 @@ def time_series_figure(df, metric, color):
 
     return fig
 
-def add_cursor(fig, cursor_time):
+def add_cursor(fig, progress):
     fig = go.Figure(fig)  
     fig.update_layout(
         shapes=[
             dict(
                 type="line",
-                x0=cursor_time,
-                x1=cursor_time,
+                x0=progress,
+                x1=progress,
                 y0=0,
                 y1=1,
                 xref="x",
@@ -164,7 +195,6 @@ def add_cursor(fig, cursor_time):
     )
 
     return fig
-
 
 def metrics_panel(driver, base_fig, row):
 
@@ -178,38 +208,15 @@ def metrics_panel(driver, base_fig, row):
     ])} for metric in METRICS]
 
 
-
 app = Dash(__name__)
 
 app.layout = html.Div(
     children=[
-        html.Div(
-            children=[
-                dcc.Dropdown(
-                    options=[
-                        {'label': v, 'value': k}
-                        for k, v in session_labels.items()
-                    ],
-                    value = 9689,
-                    id="session-dropdown"
-                )
-            ]
-        ),
+    
         html.Div(
             id="metrics-left",
             children=[
-                dcc.Graph(
-                    id="81-SPEED"
-                ),
-                dcc.Graph(
-                    id="81-THROTTLE"
-                ),
-                dcc.Graph(
-                    id="81-GEAR"
-                ),
-                dcc.Graph(
-                    id="81-BRAKE"
-                )
+                html.Div("DRIVER 1'S STATS GO HERE")
             ],
             style={
                 "width": "20%",
@@ -220,50 +227,72 @@ app.layout = html.Div(
             }
         ),
 
-        html.Div(
-            children=[
-                dcc.Graph(
-                    id="circuit",
-                    figure={},
-                    clear_on_unhover=False,
-                    style={"height": "100%"}
-                )
-            ],
+        html.Div([
+            dcc.Dropdown(
+                options=[
+                    {'label': v, 'value': k}
+                    for k, v in session_labels.items()
+                ],
+                value = 9689,
+                id="session-dropdown",
+                style={
+                "width": "300px",
+                "zIndex": 1000  
+            }
+            ),
+            dcc.Graph(
+                id="circuit",
+                figure={},
+                clear_on_unhover=False,
+                style={"height": "500px", "width": "100%"}
+            ),
+            dcc.Graph(
+                id="SPEED",
+                style={"height": "200px", "width": "100%"}
+            ),
+            dcc.Graph(
+                id="THROTTLE",
+                style={"height": "200px", "width": "100%"}
+
+            ),
+            dcc.Graph(
+                id="GEAR",
+                style={"height": "200px", "width": "100%"}
+            ),
+            dcc.Graph(
+                id="BRAKE",
+                style={"height": "200px", "width": "100%"}
+
+            )
+        ],
             style={
                 "width": "60%",
                 "display": "flex",
-                "justifyContent": "center",
-                "alignItems": "center"
+                "flexDirection": "column",
+                "alignItems": "center",
+                "overflowY": "auto",
+                "padding": "20px",
+                "gap": "15px"
             }
         ),
-
-        html.Div(
+         html.Div(
             id="metrics-right",
             children=[
-                dcc.Graph(
-                    id="4-SPEED"
-                ),
-                dcc.Graph(
-                    id="4-THROTTLE"
-                ),
-                dcc.Graph(
-                    id="4-GEAR"
-                ),
-                dcc.Graph(
-                    id="4-BRAKE"
-                )
+                html.Div("DRIVER 2'S STATS GO HERE")
             ],
             style={
                 "width": "20%",
                 "padding": "16px",
                 "backgroundColor": "#111",
                 "color": "white",
-                "borderLeft": "1px solid #333"
+                "borderRight": "1px solid #333"
             }
         ),
+
         dcc.Store(id="stored-progress"),
         dcc.Store(id="4-data"),
         dcc.Store(id="81-data")
+    
     ],
     style={
         "display": "flex",
@@ -277,14 +306,10 @@ app.layout = html.Div(
 @callback(
     Output("circuit", "figure", allow_duplicate=True),
     Output("stored-progress", "data"),
-    Output("81-SPEED", "figure", allow_duplicate=True),
-    Output("81-THROTTLE", "figure", allow_duplicate=True),
-    Output("81-GEAR", "figure", allow_duplicate=True),
-    Output("81-BRAKE", "figure", allow_duplicate=True),
-    Output("4-SPEED", "figure", allow_duplicate=True),
-    Output("4-THROTTLE", "figure", allow_duplicate=True),
-    Output("4-GEAR", "figure", allow_duplicate=True),
-    Output("4-BRAKE", "figure", allow_duplicate=True),
+    Output("SPEED", "figure", allow_duplicate=True),
+    Output("THROTTLE", "figure", allow_duplicate=True),
+    Output("GEAR", "figure", allow_duplicate=True),
+    Output("BRAKE", "figure", allow_duplicate=True),
 
     Output("81-data", "data"),
     Output("4-data", "data"),
@@ -310,65 +335,37 @@ def update_session(value):
     json_4 = {
         "df": df_4.to_dict()
     }
-    BASE_METRIC_FIGS = {
-    "81": {
-        "SPEED":   time_series_figure(df_81, "SPEED", "#e10600"),
-        "THROTTLE":time_series_figure(df_81, "THROTTLE", "#e10600"),
-        "GEAR":  time_series_figure(df_81, "GEAR", "#e10600"),
-        "BRAKE":   time_series_figure(df_81, "BRAKE", "#e10600"),
-    },
-    "4": {
-        "SPEED":   time_series_figure(df_4, "SPEED", "#00d2be"),
-        "THROTTLE":time_series_figure(df_4, "THROTTLE", "#00d2be"),
-        "GEAR":  time_series_figure(df_4, "GEAR", "#00d2be"),
-        "BRAKE":   time_series_figure(df_4, "BRAKE", "#00d2be"),
-    }
-    }
     
-
-    # TIME_SERIES = {
-    #     d: df["TIME"]
-    #     for d, df in DRIVERS.items()
-    # }
+    COMP_FIGS = {metric: base_comparison_figure(df_81, df_4, metric) for metric in METRICS}
+    
     return (base_circuit_figure(TRACK_X, TRACK_Y), 
             json_progress, 
-            BASE_METRIC_FIGS['81']["SPEED"],
-            BASE_METRIC_FIGS["81"]["THROTTLE"],
-            BASE_METRIC_FIGS["81"]["GEAR"],
-            BASE_METRIC_FIGS["81"]["BRAKE"],
-            BASE_METRIC_FIGS['4']["SPEED"],
-            BASE_METRIC_FIGS["4"]["THROTTLE"],
-            BASE_METRIC_FIGS["4"]["GEAR"],
-            BASE_METRIC_FIGS["4"]["BRAKE"],
+            COMP_FIGS['SPEED'],
+            COMP_FIGS['THROTTLE'],
+            COMP_FIGS['GEAR'],
+            COMP_FIGS['BRAKE'],
+
             json_81,
             json_4)
 
 @callback(
     Output("circuit", "figure"),
-    Output("81-SPEED", "figure"),
-    Output("81-THROTTLE", "figure"),
-    Output("81-GEAR", "figure"),
-    Output("81-BRAKE", "figure"),
-    Output("4-SPEED", "figure"),
-    Output("4-THROTTLE", "figure"),
-    Output("4-GEAR", "figure"),
-    Output("4-BRAKE", "figure"),
+    Output("SPEED", "figure"),
+    Output("THROTTLE", "figure"),
+    Output("GEAR", "figure"),
+    Output("BRAKE", "figure"),
 
     Input("circuit", "clickData"),
     Input("stored-progress", "data"),
     Input("81-data", "data"),
     Input("4-data", "data"),
     State("circuit", "figure"),
-    State("81-SPEED", "figure"),
-    State("81-THROTTLE", "figure"),
-    State("81-GEAR", "figure"),
-    State("81-BRAKE", "figure"),
-    State("4-SPEED", "figure"),
-    State("4-THROTTLE", "figure"),
-    State("4-GEAR", "figure"),
-    State("4-BRAKE", "figure")
+    State("SPEED", "figure"),
+    State("THROTTLE", "figure"),
+    State("GEAR", "figure"),
+    State("BRAKE", "figure")
 )
-def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed_81, throttle_81, gear_81, brake_81, speed_4, throttle_4, gear_4, brake_4):
+def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed, throttle, gear, brake):
     
     if clickData is None:
         raise PreventUpdate
@@ -412,14 +409,10 @@ def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed_81, thro
     
     return (
         fig,
-        add_cursor(speed_81, row_81["TIME"]),
-        add_cursor(throttle_81, row_81["TIME"]),
-        add_cursor(gear_81, row_81["TIME"]),
-        add_cursor(brake_81, row_81["TIME"]),
-        add_cursor(speed_4, row_4["TIME"]),
-        add_cursor(throttle_4, row_4["TIME"]),
-        add_cursor(gear_4, row_4["TIME"]),
-        add_cursor(brake_4, row_4["TIME"])
+        add_cursor(speed, progress),
+        add_cursor(throttle, progress),
+        add_cursor(gear, progress),
+        add_cursor(brake, progress)
     )
 
 
