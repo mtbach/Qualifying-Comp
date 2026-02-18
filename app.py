@@ -57,10 +57,27 @@ def load_session_data(SESSION_ID, DRIVER_NUMBER):
     return df
 
 def load_lap_data(SESSION_ID, DRIVER_NUMBER):
-    query = (f"""SELECT session_id, to_varchar(time_start, 'HH24:MI:SS') as time_start, lap_duration, duration_sector_1, duration_sector_2, duration_sector_3, compound, tyre_age from fct_openf1_api__fastest_lap WHERE session_id = {SESSION_ID} AND driver_number={DRIVER_NUMBER};""")
+    query = (f"""SELECT session_id, to_varchar(time_start, 'YYYY-MM-DD HH24:MI:SS.FF3') as time_start, lap_duration, duration_sector_1, duration_sector_2, duration_sector_3, compound, tyre_age from fct_openf1_api__fastest_lap WHERE session_id = {SESSION_ID} AND driver_number={DRIVER_NUMBER};""")
     lap_df = curr.execute(query).fetch_pandas_all()
     return lap_df
 
+def sector_end_row(session_df, lap_df):
+    sorted = session_df
+    sorted = sorted.set_index('TIME').sort_index()
+    sorted.index = sorted.index.tz_localize(None)
+    print(sorted)
+    sector_deltas = [
+       pd.Timedelta(seconds = lap_df['DURATION_SECTOR_1'].iloc[0]),
+       pd.Timedelta(seconds = lap_df['DURATION_SECTOR_1'].iloc[0] + lap_df['DURATION_SECTOR_2'].iloc[0])
+    ]
+    sector_time_points = [
+        pd.to_datetime(lap_df['TIME_START'].iloc[0]) + delta for delta in sector_deltas
+    ]
+    print(sector_time_points)
+    idxs =  sorted.index.get_indexer(sector_time_points, method='nearest')
+    print("Sector idx")
+    print(idxs)
+    return idxs
 
 def preprocess_driver(df):
     df = df.sort_values("TIME").reset_index(drop=True)
@@ -74,29 +91,44 @@ def preprocess_driver(df):
 
     return df
 
-
 def row_at_progress(df, progress):
     idx = (df["PROGRESS"] - progress).abs().idxmin()
     return df.loc[idx]
 
-
-session_list = load_session_list()
-session_labels = dict(zip(session_list["SESSION_ID"], session_list["CIRCUIT_NAME"]))
-
-
-def base_circuit_figure(TRACK_X, TRACK_Y):
+def base_circuit_figure(TRACK_X, TRACK_Y, sectors):
     fig = go.Figure()
 
     fig.add_trace(
         go.Scatter(
-            x=TRACK_X,
-            y=TRACK_Y,
+            x=TRACK_X[:sectors[0]],
+            y=TRACK_Y[:sectors[0]],
             mode="lines",
-            name="Circuit",
-            line=dict(color="gray"),
+            name="SECTOR1",
+            line=dict(color="red"),
             hoverinfo=None
         )
-    )
+    ),
+    
+    fig.add_trace(
+        go.Scatter(
+            x=TRACK_X[sectors[0]:sectors[1]],
+            y=TRACK_Y[sectors[0]:sectors[1]],
+            mode="lines",
+            name="SECTOR2",
+            line=dict(color="blue"),
+            hoverinfo=None
+        )
+    ),
+    fig.add_trace(
+        go.Scatter(
+            x=TRACK_X[sectors[1]:],
+            y=TRACK_Y[sectors[1]:],
+            mode="lines",
+            name="SECTOR3",
+            line=dict(color="green"),
+            hoverinfo=None
+        )
+    ),
     fig.add_trace(
         go.Scatter(
             x=TRACK_X,
@@ -104,18 +136,17 @@ def base_circuit_figure(TRACK_X, TRACK_Y):
             mode="markers",
             marker=dict(size=8, opacity=0),
             hoverinfo="none",
-            name="hover_points"
+            showlegend=False
         )
     )
 
     fig.update_layout(
         dragmode="pan",  
         hovermode="closest",
-        showlegend=False,
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         height=300,
-        uirevision="track",
+        uirevision="constant",
         margin=dict(l=15, r=15, t=15, b=15)
     )
 
@@ -217,7 +248,7 @@ def lap_panel(df):
     return [html.Div([
             html.H3(f'Tire Compound:    {df["COMPOUND"].iloc[0]}'),
             html.H3(f'Tire Age:    {df["TYRE_AGE"].iloc[0]}'),
-            html.H3(f'Lap Starts At:    {df["TIME_START"].iloc[0]}'),
+            html.H3(f'Lap Starts At:    {df["TIME_START"].iloc[0][12:]}'),
             html.H3(f'Lap Time:    {df["LAP_DURATION"].iloc[0]}'),
             html.H3(f'Sector 1 Time:    {df["DURATION_SECTOR_1"].iloc[0]}'),
             html.H3(f'Sector 2 Time:    {df["DURATION_SECTOR_2"].iloc[0]}'),
@@ -225,6 +256,9 @@ def lap_panel(df):
     ])]
     
 app = Dash(__name__)
+
+session_list = load_session_list()
+session_labels = dict(zip(session_list["SESSION_ID"], session_list["CIRCUIT_NAME"]))
 
 app.layout = html.Div(
     children=[
@@ -338,29 +372,27 @@ app.layout = html.Div(
 def update_session(value):
     df_81 = load_session_data(value, 81)
     df_4 = load_session_data(value, 4)
-    print(df_81)
+    
     df_81 = preprocess_driver(df_81)
     df_4= preprocess_driver(df_4)
     
     lap_81 = load_lap_data(value, 81)
     lap_4 = load_lap_data(value, 4)
-    print(lap_4)
-    TRACK_X = df_81["X"].values
-    TRACK_Y = df_81["Y"].values
+    
+    TRACK_X = df_81["X"].to_numpy()
+    TRACK_Y = df_81["Y"].to_numpy()
     TRACK_PROGRESS = df_81["PROGRESS"]
+    
     json_progress = {
-        "df": TRACK_PROGRESS.to_dict()
-    }
+        "df": TRACK_PROGRESS.to_dict()}
     json_81 = {
-        "df": df_81.to_dict()
-    }
+        "df": df_81.to_dict()}
     json_4 = {
-        "df": df_4.to_dict()
-    }
+        "df": df_4.to_dict()}
     
     COMP_FIGS = {metric: base_comparison_figure(df_81, df_4, metric) for metric in METRICS}
-    
-    return (base_circuit_figure(TRACK_X, TRACK_Y), 
+    sectors = sector_end_row(df_81, lap_81)
+    return (base_circuit_figure(TRACK_X, TRACK_Y, sectors), 
             json_progress, 
             COMP_FIGS['SPEED'],
             COMP_FIGS['THROTTLE'],
@@ -393,7 +425,6 @@ def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed, throttl
     if clickData is None:
         raise PreventUpdate
     
-    # unpacked_progress = pd.DataFrame(TRACK_PROGRESS["df"])
     unpacked_progress = pd.DataFrame(TRACK_PROGRESS)["df"].values
     unpacked_81 = pd.DataFrame(DATA_81["df"])
     unpacked_4 = pd.DataFrame(DATA_4["df"])
@@ -404,10 +435,8 @@ def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed, throttl
     print(progress)
     print(unpacked_4)
     row_81 = row_at_progress(unpacked_81, progress)
-    row_4 = row_at_progress(unpacked_4, progress)
 
-    fig["data"] = fig["data"][:2]
-
+    fig["data"] = fig["data"][:4]
     
     fig["data"].append({
         "type": "scatter",
@@ -415,21 +444,10 @@ def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed, throttl
         "y": [row_81["Y"]],
         "mode": "markers",
         "marker": {"size": 14},
-        "name": "Driver 81",
+        "name": "Car",
         "hoverinfo": "skip"
     })
 
-    # fig["data"].append({
-    #     "type": "scatter",
-    #     "x": [row_4["X"]],
-    #     "y": [row_4["Y"]],
-    #     "mode": "markers",
-    #     "marker": {"size": 14},
-    #     "name": "Driver 4",
-    #     "hoverinfo": "skip"
-    # })
-
-    
     return (
         fig,
         add_cursor(speed, progress),
