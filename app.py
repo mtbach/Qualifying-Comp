@@ -356,18 +356,17 @@ app.layout = html.Div(
 
 
 @callback(
-    Output("circuit", "figure", allow_duplicate=True),
+    Output("circuit", "figure"),
     Output("stored-progress", "data"),
-    Output("SPEED", "figure", allow_duplicate=True),
-    Output("THROTTLE", "figure", allow_duplicate=True),
-    Output("GEAR", "figure", allow_duplicate=True),
-    Output("BRAKE", "figure", allow_duplicate=True),
+    Output("SPEED", "figure"),
+    Output("THROTTLE", "figure"),
+    Output("GEAR", "figure"),
+    Output("BRAKE", "figure"),
     Output("81-lap-data", "children"),
     Output("4-lap-data", "children"),
     Output("81-data", "data"),
     Output("4-data", "data"),
-    Input("session-dropdown", "value"),
-    prevent_initial_call=True
+    Input("session-dropdown", "value")
     )
 def update_session(value):
     df_81 = load_session_data(value, 81)
@@ -404,11 +403,11 @@ def update_session(value):
             json_4)
 
 @callback(
-    Output("circuit", "figure"),
-    Output("SPEED", "figure"),
-    Output("THROTTLE", "figure"),
-    Output("GEAR", "figure"),
-    Output("BRAKE", "figure"),
+    Output("circuit", "figure", allow_duplicate=True),
+    Output("SPEED", "figure", allow_duplicate=True),
+    Output("THROTTLE", "figure", allow_duplicate=True),
+    Output("GEAR", "figure", allow_duplicate=True),
+    Output("BRAKE", "figure", allow_duplicate=True),
 
     Input("circuit", "clickData"),
     Input("stored-progress", "data"),
@@ -418,7 +417,8 @@ def update_session(value):
     State("SPEED", "figure"),
     State("THROTTLE", "figure"),
     State("GEAR", "figure"),
-    State("BRAKE", "figure")
+    State("BRAKE", "figure"),
+    prevent_initial_call=True
 )
 def scrub_track(clickData, TRACK_PROGRESS, DATA_81, DATA_4 , fig, speed, throttle, gear, brake):
     
