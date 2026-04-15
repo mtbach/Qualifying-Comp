@@ -1,13 +1,86 @@
+version: 2
+
 sources:
   - name: openf1_api
     database: raw
     schema: openf1_api
     tables:
       - name: sessions
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: meeting_key
+            tests:
+              - not_null
+          - name: time_loaded
+            tests:
+              - not_null
       - name: session_result
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
       - name: fp3_result
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
       - name: laps
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
+          - name: lap_number
+            tests:
+              - not_null
       - name: stint
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
+          - name: stint_number
+            tests:
+              - not_null
       - name: drivers
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
       - name: car_telemetry
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
+          - name: date
+            tests:
+              - not_null
       - name: car_location
+        columns:
+          - name: session_key
+            tests:
+              - not_null
+          - name: driver_number
+            tests:
+              - not_null
+          - name: date
+            tests:
+              - not_null

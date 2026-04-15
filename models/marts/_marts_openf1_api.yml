@@ -1,0 +1,220 @@
+version: 2
+
+models:
+  - name: dim_openf1_api__sessions
+    description: Session dimension for dashboard filtering and display.
+    columns:
+      - name: session_sk
+        tests:
+          - not_null
+          - unique
+      - name: session_id
+        tests:
+          - not_null
+      - name: session_type
+        tests:
+          - not_null
+      - name: session_name
+        tests:
+          - not_null
+      - name: date_start
+        tests:
+          - not_null
+      - name: date_end
+        tests:
+          - not_null
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: circuit_id
+        tests:
+          - not_null
+      - name: circuit_name
+        tests:
+          - not_null
+      - name: country_code
+        tests:
+          - not_null
+      - name: city
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+
+  - name: fct_openf1_api__fastest_lap
+    description: Fastest qualifying or practice lap per session and driver.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_openf1_api__sessions')
+              field: session_id
+      - name: session_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['PRACTICE', 'QUALIFYING', 'SPRINT QUALIFYING']
+      - name: driver_number
+        tests:
+          - not_null
+      - name: lap_number
+        tests:
+          - not_null
+      - name: lap_duration
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: duration_sector_1
+        tests:
+          - not_null
+      - name: duration_sector_2
+        tests:
+          - not_null
+      - name: duration_sector_3
+        tests:
+          - not_null
+      - name: compound
+        tests:
+          - not_null
+      - name: tyre_age
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: rn
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1]
+              quote: false
+      - name: time_start
+        tests:
+          - not_null
+
+  - name: fct_openf1_api__telemetry_4
+    description: Joined car telemetry and location readings for driver 4.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - time
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_openf1_api__sessions')
+              field: session_id
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: driver_number
+        tests:
+          - not_null
+          - accepted_values:
+              values: [4]
+              quote: false
+      - name: time
+        tests:
+          - not_null
+      - name: speed
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: throttle
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between 0 and 100"
+      - name: brake
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: rpm
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: n_gear
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between 0 and 8"
+      - name: x
+        tests:
+          - not_null
+      - name: y
+        tests:
+          - not_null
+
+  - name: fct_openf1_api__telemetry_81
+    description: Joined car telemetry and location readings for driver 81.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - time
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_openf1_api__sessions')
+              field: session_id
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: driver_number
+        tests:
+          - not_null
+          - accepted_values:
+              values: [81]
+              quote: false
+      - name: time
+        tests:
+          - not_null
+      - name: speed
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: throttle
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between 0 and 100"
+      - name: brake
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: rpm
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: n_gear
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between 0 and 8"
+      - name: x
+        tests:
+          - not_null
+      - name: y
+        tests:
+          - not_null

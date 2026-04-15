@@ -1,11 +1,11 @@
 import pandas as pd
 import numpy as np
-import snowflake.connector
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State, callback
 from dash.exceptions import PreventUpdate
 import os
 from dotenv import load_dotenv
+from data_access import OpenF1DataAccess
 
 load_dotenv()
 
@@ -18,48 +18,20 @@ SNOWFLAKE_CONFIG = {
     "schema": os.getenv("SCHEMA"),
     "role": os.getenv("ROLE")
 }
-conn = snowflake.connector.connect(**SNOWFLAKE_CONFIG)
-curr = conn.cursor()
+data_access = OpenF1DataAccess(SNOWFLAKE_CONFIG)
 METRICS = ["SPEED", "THROTTLE", "GEAR", "BRAKE"]
 
 def load_session_list():
-    query = "SELECT session_id, circuit_name from dim_openf1_api__sessions WHERE session_name = 'QUALIFYING' and year = 2025;"
-    res = curr.execute(query).fetch_pandas_all()
-    return res
+    return data_access.get_sessions(year=2025, session_name="QUALIFYING")
 
 def load_session_data(SESSION_ID, DRIVER_NUMBER):
-    query1 = (f"""SELECT time_start from fct_openf1_api__fastest_lap WHERE session_id = {SESSION_ID} AND driver_number = {DRIVER_NUMBER};""")
-    res = curr.execute(query1).fetchone()
-    time_start = res[0]
-    query2 = (f"""SELECT timeadd(second, lap_duration, time_start) from fct_openf1_api__fastest_lap where session_id = {SESSION_ID} and driver_number = {DRIVER_NUMBER};""")
-    res = curr.execute(query2).fetchone()
-    time_end = res[0]
-    
-    query = f"""
-    
-        SELECT
-            driver_number,
-            time,
-            x,
-            y,
-            speed,
-            rpm,
-            n_gear as gear, 
-            throttle,
-            brake
-        FROM fct_openf1_api__telemetry_{str(DRIVER_NUMBER)}
-        WHERE session_id = {SESSION_ID}
-          AND time >= to_timestamp_ntz(%s) AND time <= to_timestamp_ntz(%s)
-        ORDER BY time
-    """
-    
-    df = curr.execute(query, (time_start, time_end)).fetch_pandas_all()
-    return df
+    time_start, time_end = data_access.get_fastest_lap_window(SESSION_ID, DRIVER_NUMBER)
+    return data_access.get_driver_telemetry_for_window(
+        SESSION_ID, DRIVER_NUMBER, time_start, time_end
+    )
 
 def load_lap_data(SESSION_ID, DRIVER_NUMBER):
-    query = (f"""SELECT session_id, to_varchar(time_start, 'YYYY-MM-DD HH24:MI:SS.FF3') as time_start, lap_duration, duration_sector_1, duration_sector_2, duration_sector_3, compound, tyre_age from fct_openf1_api__fastest_lap WHERE session_id = {SESSION_ID} AND driver_number={DRIVER_NUMBER};""")
-    lap_df = curr.execute(query).fetch_pandas_all()
-    return lap_df
+    return data_access.get_fastest_lap_metadata(SESSION_ID, DRIVER_NUMBER)
 
 def sector_end_row(session_df, lap_df):
     sorted = session_df

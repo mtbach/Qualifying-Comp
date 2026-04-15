@@ -1,0 +1,297 @@
+version: 2
+
+models:
+  - name: stg_openf1_api__sessions
+    description: Cleaned session records from the OpenF1 API.
+    columns:
+      - name: session_sk
+        tests:
+          - not_null
+          - unique
+      - name: session_id
+        tests:
+          - not_null
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: session_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['PRACTICE', 'QUALIFYING', 'RACE', 'SPRINT', 'SPRINT QUALIFYING', 'SPRINT SHOOTOUT']
+      - name: date_start
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+      - name: time_loaded
+        tests:
+          - not_null
+
+  - name: stg_openf1_api__drivers
+    description: Driver metadata by session.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - time_loaded
+    columns:
+      - name: driver_sk
+        tests:
+          - not_null
+          - unique
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: driver_number
+        tests:
+          - not_null
+      - name: full_name
+        tests:
+          - not_null
+      - name: name_acronym
+        tests:
+          - not_null
+      - name: team_name
+        tests:
+          - not_null
+      - name: time_loaded
+        tests:
+          - not_null
+
+  - name: stg_openf1_api__laps
+    description: Lap-level timing and speed trap readings.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - lap_number
+            - time_loaded
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: driver_number
+        tests:
+          - not_null
+      - name: lap_number
+        tests:
+          - not_null
+      - name: time_start
+        tests:
+          - not_null
+      - name: lap_duration
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                where: "lap_duration is not null"
+      - name: time_loaded
+        tests:
+          - not_null
+
+  - name: stg_openf1_api__stints
+    description: Tyre stint windows by session and driver.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - stint_number
+            - time_loaded
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: driver_number
+        tests:
+          - not_null
+      - name: stint_number
+        tests:
+          - not_null
+      - name: lap_start
+        tests:
+          - not_null
+      - name: lap_end
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= lap_start"
+      - name: compound
+        tests:
+          - not_null
+      - name: tyre_age_at_start
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                where: "tyre_age_at_start is not null"
+      - name: time_loaded
+        tests:
+          - not_null
+
+  - name: stg_openf1_api__session_result
+    description: Session classification and duration results by driver.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - time_loaded
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: driver_number
+        tests:
+          - not_null
+      - name: position
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
+              config:
+                where: "position is not null"
+      - name: number_of_laps
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                where: "number_of_laps is not null"
+      - name: time_loaded
+        tests:
+          - not_null
+
+  - name: stg_openf1_api__fp3_result
+    description: FP3 classification and duration results by driver.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: driver_number
+        tests:
+          - not_null
+      - name: position
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
+              config:
+                where: "position is not null"
+      - name: number_of_laps
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                where: "number_of_laps is not null"
+
+  - name: stg_openf1_api__car_telemetry
+    description: Driver telemetry readings from the car data feed.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - time
+            - time_loaded
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: driver_number
+        tests:
+          - not_null
+      - name: time
+        tests:
+          - not_null
+      - name: speed
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                where: "speed is not null"
+      - name: throttle
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "between 0 and 100"
+              config:
+                where: "throttle is not null"
+      - name: brake
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: n_gear
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "between 0 and 8"
+              config:
+                where: "n_gear is not null"
+      - name: time_loaded
+        tests:
+          - not_null
+
+  - name: stg_openf1_api__car_location
+    description: Driver location coordinates from the position feed.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - session_id
+            - driver_number
+            - time
+            - time_loaded
+    columns:
+      - name: session_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_openf1_api__sessions')
+              field: session_id
+      - name: meeting_id
+        tests:
+          - not_null
+      - name: driver_number
+        tests:
+          - not_null
+      - name: time
+        tests:
+          - not_null
+      - name: x
+        tests:
+          - not_null
+      - name: y
+        tests:
+          - not_null
+      - name: time_loaded
+        tests:
+          - not_null
