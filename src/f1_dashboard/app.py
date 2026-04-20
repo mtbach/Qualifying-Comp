@@ -5,7 +5,11 @@ from dash import Dash, dcc, html, Input, Output, State, callback
 from dash.exceptions import PreventUpdate
 import os
 from dotenv import load_dotenv
-from data_access import OpenF1DataAccess
+
+try:
+    from .data_access import OpenF1DataAccess
+except ImportError:
+    from data_access import OpenF1DataAccess
 
 load_dotenv()
 
